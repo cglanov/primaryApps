@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desktop App Launcher</title>
+  <style>
+    :root {
+      --bezel-color: #1c1e22;
+      --bezel-border: #2e3238;
+      --stand-metal: linear-gradient(180deg, #6e737b 0%, #3d4147 50%, #585d64 100%);
+      --taskbar-bg: rgba(16, 23, 38, 0.78);
+      --icon-size: 58px;
+      --icon-radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 35%, #232936 0%, #0f1218 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ================= FAUX MONITOR HARDWARE ================= */
+    .monitor-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 1180px;
+    }
+
+    .monitor-frame {
+      width: 100%;
+      background: var(--bezel-color);
+      border: 2px solid var(--bezel-border);
+      border-radius: 18px;
+      padding: 16px 16px 0 16px;
+      box-shadow:
+        0 30px 70px rgba(0, 0, 0, 0.75),
+        inset 0 1px 1px rgba(255, 255, 255, 0.12);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .monitor-screen {
+      position: relative;
+      width: 100%;
+      height: clamp(460px, 72vh, 720px);
+      border-radius: 6px;
+      overflow: hidden;
+      background-color: #0b2545;
+      /* Faux Windows 11-style Bloom Wallpaper */
+      background-image:
+        radial-gradient(ellipse at 52% 48%, rgba(56, 152, 255, 0.75) 0%, rgba(22, 86, 184, 0.45) 38%, transparent 70%),
+        radial-gradient(circle at 30% 65%, rgba(0, 210, 255, 0.55) 0%, transparent 45%),
+        radial-gradient(circle at 70% 35%, rgba(14, 58, 138, 0.9) 0%, transparent 55%),
+        linear-gradient(135deg, #06142e 0%, #0d326d 50%, #071938 100%);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Subtle decorative Windows ribbon curves */
+    .wallpaper-ribbon {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.55;
+      background:
+        radial-gradient(60% 45% at 50% 50%, rgba(114, 198, 255, 0.35) 0%, rgba(15, 76, 175, 0.1) 60%, transparent 100%);
+      filter: blur(8px);
+    }
+
+    .monitor-chin {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .monitor-brand {
+      color: #6b7280;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .power-led {
+      position: absolute;
+      right: 22px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+    }
+
+    .monitor-neck {
+      width: 110px;
+      height: 54px;
+      background: var(--stand-metal);
+      box-shadow: inset 0 6px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .monitor-base {
+      width: 280px;
+      height: 14px;
+      background: linear-gradient(180deg, #7c828b 0%, #3b3f46 100%);
+      border-radius: 6px 6px 2px 2px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.7);
+    }
+
+    /* ================= DESKTOP ICON GRID ================= */
+    .desktop-area {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      padding: 24px 28px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+      grid-auto-rows: min-content;
+      gap: 18px 14px;
+      align-content: start;
+    }
+
+    .desktop-area::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .desktop-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 3px;
+    }
+
+    .app-shortcut {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-decoration: none;
+      padding: 10px 6px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .app-shortcut:hover {
+      background: rgba(255, 255, 255, 0.13);
+      border-color: rgba(255, 255, 255, 0.22);
+      backdrop-filter: blur(4px);
+    }
+
+    .app-shortcut:active {
+      transform: scale(0.96);
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Square Rounded App Icon Container */
+    .app-icon-box {
+      width: var(--icon-size);
+      height: var(--icon-size);
+      aspect-ratio: 1 / 1;
+      border-radius: var(--icon-radius);
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow:
+        0 6px 14px rgba(0, 0, 0, 0.38),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    .app-icon-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .app-title {
+      color: #ffffff;
+      font-size: 12.5px;
+      font-weight: 400;
+      line-height: 1.25;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.65);
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-width: 96px;
+    }
+
+    .status-badge {
+      position: absolute;
+      top: 6px;
+      right: 14px;
+      background: #f59e0b;
+      color: #111827;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+    }
+
+    /* ================= STATUS / LOADING OVERLAY ================= */
+    .desktop-message {
+      grid-column: 1 / -1;
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 18px 22px;
+      border-radius: 10px;
+      max-width: 480px;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+
+    /* ================= FAUX WINDOWS TASKBAR ================= */
+    .taskbar {
+      position: relative;
+      z-index: 10;
+      height: 44px;
+      background: var(--taskbar-bg);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+    }
+
+    .taskbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .win-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .win-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .search-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      padding: 4px 12px;
+      height: 28px;
+    }
+
+    .search-pill input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ffffff;
+      font-size: 12px;
+      width: 140px;
+    }
+
+    .search-pill input::placeholder {
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    .taskbar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: #f1f5f9;
+      font-size: 11.5px;
+    }
+
+    .refresh-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #e2e8f0;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .tray-clock {
+      text-align: right;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 640px) {
+      .search-pill {
+        display: none;
+      }
+      .monitor-frame {
+        padding: 10px 10px 0 10px;
+      }
+      .desktop-area {
+        grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="monitor-wrapper">
+    <div class="monitor-frame">
+      <div class="monitor-screen">
+        <div class="wallpaper-ribbon"></div>
+
+        <!-- App Icons Grid -->
+        <main class="desktop-area" id="desktop">
+          <div class="desktop-message">Loading desktop apps from spreadsheet...</div>
+        </main>
+
+        <!-- Faux Windows Taskbar -->
+        <footer class="taskbar">
+          <div class="taskbar-left">
+            <!-- Windows 4-pane Start Icon -->
+            <button class="win-btn" id="startBtn" title="Start" aria-label="Start">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="2" width="9" height="9" rx="1" fill="#38bdf8"/>
+                <rect x="13" y="2" width="9" height="9" rx="1" fill="#38bdf8"/>
+                <rect x="2" y="13" width="9" height="9" rx="1" fill="#0284c7"/>
+                <rect x="13" y="13" width="9" height="9" rx="1" fill="#0284c7"/>
+              </svg>
+            </button>
+
+            <!-- Live Filter Search -->
+            <div class="search-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="2.2">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="20" y1="20" x2="16.2" y2="16.2"></line>
+              </svg>
+              <input type="text" id="searchInput" placeholder="Search apps..." aria-label="Search apps" />
+            </div>
+          </div>
+
+          <div class="taskbar-right">
+            <button class="refresh-btn" id="refreshBtn" title="Reload Spreadsheet">↻ Sync</button>
+            <div class="tray-clock">
+              <div id="clockTime">12:00 PM</div>
+              <div id="clockDate">1/1/2026</div>
+            </div>
+          </div>
+        </footer>
+      </div>
+
+      <div class="monitor-chin">
+        <span class="monitor-brand">Workspace</span>
+        <span class="power-led" title="Monitor On"></span>
+      </div>
+    </div>
+
+    <div class="monitor-neck"></div>
+    <div class="monitor-base"></div>
+  </div>
+
+  <script>
+    const SHEET_ID = "1iV5ZewEZUxG1sIhyerBlLhwbPTIblt4H1bQ2B5i8Rxc";
+    const SHEET_GID = "0";
+    const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+
+    const desktopEl = document.getElementById("desktop");
+    const searchInput = document.getElementById("searchInput");
+    const refreshBtn = document.getElementById("refreshBtn");
+
+    let allApps = [];
+
+    /**
+     * Converts Google Drive / Dropbox shared image URLs into direct embeddable image URLs.
+     */
+    function normalizeImageUrl(rawUrl) {
+      if (!rawUrl) return "";
+      const url = rawUrl.trim();
+
+      // Match Google Drive /file/d/FILE_ID/... or ?id=FILE_ID
+      const driveFileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+      const driveIdParam = url.match(/drive\.google\.com\/.*[?&]id=([a-zA-Z0-9_-]+)/);
+      const fileId = (driveFileMatch && driveFileMatch[1]) || (driveIdParam && driveIdParam[1]);
+
+      if (fileId) {
+        return `https://lh3.googleusercontent.com/d/${fileId}`;
+      }
+
+      // Convert Dropbox share links
+      if (url.includes("dropbox.com")) {
+        return url.replace(/([?&])dl=0/, "$1raw=1");
+      }
+
+      return url;
+    }
+
+    /**
+     * Ensures external links open properly rather than as relative GitHub Pages paths.
+     */
+    function normalizeTargetUrl(rawUrl) {
+      if (!rawUrl) return "#";
+      const trimmed = rawUrl.trim();
+      if (/^https?:\/\//i.test(trimmed)) return trimmed;
+      return `https://${trimmed}`;
+    }
+
+    /**
+     * Generates a fallback SVG data URI with the app's first initial if an image fails to load.
+     */
+    function createFallbackIcon(title) {
+      const letter = (title || "?").trim().charAt(0).toUpperCase();
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3b82f6"/>
+              <stop offset="100%" stop-color="#1d4ed8"/>
+            </linearGradient>
+          </defs>
+          <rect width="120" height="120" fill="url(#g)"/>
+          <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle"
+                fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="54" font-weight="600">
+            ${letter}
+          </text>
+        </svg>`;
+      return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    }
+
+    /**
+     * Fetches and parses rows from the Google Sheet.
+     * Col A (0): title | Col B (1): url | Col C (2): status | Col D (3): icon
+     */
+    async function loadSpreadsheet() {
+      desktopEl.innerHTML = `<div class="desktop-message">Syncing apps from Google Sheets...</div>`;
+
+      try {
+        const response = await fetch(GVIZ_URL);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const rawText = await response.text();
+        const jsonStart = rawText.indexOf("{");
+        const jsonEnd = rawText.lastIndexOf("}");
+        if (jsonStart === -1 || jsonEnd === -1) {
+          throw new Error("Invalid response format from Google Sheets.");
+        }
+
+        const parsed = JSON.parse(rawText.slice(jsonStart, jsonEnd + 1));
+        const rows = parsed?.table?.rows || [];
+
+        allApps = rows
+          .map((row, idx) => {
+            const cells = row.c || [];
+            const title = cells[0]?.v != null ? String(cells[0].v).trim() : "";
+            const url = cells[1]?.v != null ? String(cells[1].v).trim() : "";
+            const status = cells[2]?.v != null ? String(cells[2].v).trim() : "";
+            const icon = cells[3]?.v != null ? String(cells[3].v).trim() : "";
+
+            // Skip header row if included in data rows
+            if (idx === 0 && title.toLowerCase() === "title" && url.toLowerCase() === "url") {
+              return null;
+            }
+            if (!title) return null;
+
+            return { title, url, status, icon };
+          })
+          .filter(Boolean)
+          .filter((item) => {
+            const s = item.status.toLowerCase();
+            return !["hidden", "disabled", "inactive", "draft", "false", "no"].includes(s);
+          });
+
+        renderApps(allApps);
+      } catch (err) {
+        console.error(err);
+        desktopEl.innerHTML = `
+          <div class="desktop-message">
+            <strong>Could not load spreadsheet data.</strong><br/>
+            Make sure the Google Sheet sharing is set to <em>"Anyone with the link → Viewer"</em>, then click <strong>↻ Sync</strong> in the taskbar.
+          </div>`;
+      }
+    }
+
+    /**
+     * Renders app icons onto the faux desktop grid.
+     */
+    function renderApps(apps) {
+      if (!apps.length) {
+        desktopEl.innerHTML = `<div class="desktop-message">No active apps found in the spreadsheet.</div>`;
+        return;
+      }
+
+      desktopEl.innerHTML = "";
+
+      apps.forEach((app) => {
+        const link = document.createElement("a");
+        link.className = "app-shortcut";
+        link.href = normalizeTargetUrl(app.url);
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.title = app.status ? `${app.title} (${app.status})` : app.title;
+
+        const iconBox = document.createElement("div");
+        iconBox.className = "app-icon-box";
+
+        const img = document.createElement("img");
+        img.alt = `${app.title} icon`;
+        img.loading = "lazy";
+        const resolvedIcon = normalizeImageUrl(app.icon);
+        img.src = resolvedIcon || createFallbackIcon(app.title);
+        img.onerror = () => {
+          img.onerror = null;
+          img.src = createFallbackIcon(app.title);
+        };
+
+        iconBox.appendChild(img);
+        link.appendChild(iconBox);
+
+        // Show subtle badge if status is "soon" / "coming soon" / "beta"
+        const sLower = app.status.toLowerCase();
+        if (["soon", "coming soon", "beta", "new"].includes(sLower)) {
+          const badge = document.createElement("span");
+          badge.className = "status-badge";
+          badge.textContent = app.status;
+          link.appendChild(badge);
+        }
+
+        const label = document.createElement("span");
+        label.className = "app-title";
+        label.textContent = app.title;
+        link.appendChild(label);
+
+        desktopEl.appendChild(link);
+      });
+    }
+
+    // Live search filtering
+    searchInput.addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const filtered = allApps.filter((app) => app.title.toLowerCase().includes(q));
+      renderApps(filtered);
+    });
+
+    // Manual sync button
+    refreshBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      loadSpreadsheet();
+    });
+
+    // Live Windows Taskbar Clock
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("clockTime").textContent = now.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+      });
+      document.getElementById("clockDate").textContent = now.toLocaleDateString();
+    }
+
+    updateClock();
+    setInterval(updateClock, 15000);
+    loadSpreadsheet();
+  </script>
+</body>
+</html>
